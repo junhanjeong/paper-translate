@@ -1,0 +1,5 @@
+source_mds/
+source_mds_complete/
+translated_mds/
+.env
+.DS_Store
