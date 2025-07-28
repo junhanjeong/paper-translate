@@ -46,7 +46,7 @@ paper_translate/
 - 헤더 기준으로 단락 분할하여 번역
 - API 속도 제한 자동 제어
 - 번역 예시를 참고하여 일관된 스타일 유지
-- **Google Gemini API 무료 사용** (일일 제한 내에서)
+- Google Gemini API 무료 사용 (하루 500번 요청 무료)
 
 ## 적용 계획
 
