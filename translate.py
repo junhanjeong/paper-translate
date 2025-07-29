@@ -14,40 +14,48 @@ if not GOOGLE_API_KEY:
     raise ValueError("GOOGLE_API_KEY 환경 변수를 설정해주세요.")
 
 # --- 설정 변수 ---
-MODEL_NAME = "gemini-2.5-flash-lite"
+MODEL_NAME = "gemini-2.5-flash"
 SOURCE_DIR = "source_mds"
 TRANSLATED_DIR = "translated_mds"
 PROMPT_EXAMPLE_DIR = "prompt_examples"
-REQUESTS_PER_MINUTE = 15
+REQUESTS_PER_MINUTE = 10
 SECONDS_TO_WAIT = 60
 
 # --- 프롬프트 생성 함수 (업데이트됨) ---
-def create_system_instruction(example_en_text, example_ko_text):
+def create_system_instruction(example_en_texts, example_ko_texts):
     """번역 작업을 위한 시스템 지침(System Instruction)을 생성합니다."""
-    # 사용자 맞춤 지시사항 반영
-    return f"""
+    # 사용자 맞춤 지시사항 반영 (공통 헤더)
+    header = """
 You are a specialized translator for academic papers, translating Markdown documents from English to Korean.
 Follow these rules meticulously:
 1.  Translate the main content into professional, natural-sounding Korean.
 2.  **Crucially, do not translate technical English terms.** Keep terms like 'Transformer', 'DETR', 'cross attention', 'encoder', 'decoder', etc., in their original English form.
 3.  **Ensure that figure links are preserved.** Do not omit any figure URLs or accompanying descriptions.
 4.  **Include references formatted as [1], but when encountering footnote markers like [^1], remove only the [^1] marker while keeping the adjacent explanation text intact.**
-5.  **Use the provided example as a reference for tone, translation style, and formatting.** This includes matching whitespace, line breaks, and paragraph divisions exactly as shown in the example.
+5.  **Use the provided examples as a reference for tone, translation style, and formatting.** This includes matching whitespace, line breaks, and paragraph divisions exactly as shown.
 6.  **Do not create any new titles or headings; translate only the content you’ve been given.**
-7.  **In the translated text, enhance readability by using bold formatting for important terms or key phrases, as shown in the [Korean Translation] of the translation example.**
+7.  **Enhance readability by using bold formatting for important terms or key phrases, as in the examples.**
 
+Now, here are multiple examples:
+"""
+    # 여러 예시 병합
+    examples = ""
+    for en, ko in zip(example_en_texts, example_ko_texts):
+        examples += f"""
 ---
 ### Translation Example ###
-
 [English Original]
-{example_en_text}
+{en}
 
 [Korean Translation]
-{example_ko_text}
----
-
-Now, please translate the following English text into Korean based on all the rules and the example provided.
+{ko}
 """
+    # 마무리 안내
+    footer = """
+---
+Now, please translate the following English text into Korean based on all the rules and the examples provided.
+"""
+    return header + examples + footer
 
 # --- 메인 번역 함수 (업데이트됨) ---
 def translate_markdown_file(filepath, client, model_config):
@@ -140,17 +148,41 @@ if __name__ == "__main__":
     # 모델 초기화 (GenerationConfig 포함)
     client = genai.Client(api_key=GOOGLE_API_KEY)
 
-    # 프롬프트 예시 파일 미리 읽기
-    try:
-        with open(os.path.join(PROMPT_EXAMPLE_DIR, "small_example_en.md"), 'r', encoding='utf-8') as f_en:
-            example_en = f_en.read()
-        with open(os.path.join(PROMPT_EXAMPLE_DIR, "small_example_ko.md"), 'r', encoding='utf-8') as f_ko:
-            example_ko = f_ko.read()
-    except FileNotFoundError:
-        print(f"   [오류] '{PROMPT_EXAMPLE_DIR}' 폴더에서 예시 파일을 찾을 수 없습니다.")
-        
-    # 시스템 지침(System Instruction)을 한 번만 생성
-    system_instruction = create_system_instruction(example_en, example_ko)
+    # --- 프롬프트 예시 파일 미리 읽기 (업데이트됨) ---
+    # 사용할 예시 파일 베이스 이름을 리스트로 지정합니다.
+    example_bases = ["small_example"]  # 예: ["small_example", "another_example"]
+    example_en_texts = []
+    example_ko_texts = []
+    for base in example_bases:
+        en_path = os.path.join(PROMPT_EXAMPLE_DIR, f"{base}_en.md")
+        ko_path = os.path.join(PROMPT_EXAMPLE_DIR, f"{base}_ko.md")
+        if not os.path.exists(en_path) or not os.path.exists(ko_path):
+            print(f"   [오류] 예시 파일이 누락되었습니다: {base}_en.md 또는 {base}_ko.md")
+            exit()
+        with open(en_path, 'r', encoding='utf-8') as f_en:
+            en_content = f_en.read()
+        with open(ko_path, 'r', encoding='utf-8') as f_ko:
+            ko_content = f_ko.read()
+        # 헤더(#) 기준 분할 및 빈문단 제거
+        def split_and_clean(text):
+            chunks = re.split(r'(^(?:#+ ).*$)', text, flags=re.MULTILINE)
+            pars = []
+            for i, chunk in enumerate(chunks):
+                # 짝수 인덱스(본문)만, 공백 아닌 것만
+                if i % 2 == 0 and chunk.strip():
+                    pars.append(chunk.strip())
+            return pars
+        en_pars = split_and_clean(en_content)
+        ko_pars = split_and_clean(ko_content)
+        # 영어-한국어 단락 쌍 추가
+        for en_par, ko_par in zip(en_pars, ko_pars):
+            example_en_texts.append(en_par)
+            example_ko_texts.append(ko_par)
+    if not example_en_texts:
+        print(f"   [오류] '{PROMPT_EXAMPLE_DIR}' 폴더에 유효한 예시 파일이 없습니다.")
+        exit()
+    # 시스템 지침(System Instruction) 생성
+    system_instruction = create_system_instruction(example_en_texts, example_ko_texts)
 
     model_config = types.GenerateContentConfig(
     temperature=0,
