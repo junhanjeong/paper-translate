@@ -53,7 +53,7 @@ Flamingo는 **텍스트와 섞여 있는 시각적 데이터를 입력으로 받
 
 대형 Language Model (LM)의 성능에 있어 핵심적인 요소 중 하나는 **방대한 양의 텍스트 데이터로 학습되었다는 점**이다. 이러한 학습은 **범용적인 텍스트 생성 능력**을 모델에 부여하며, **task 예시만으로도 뛰어난 성능을 발휘할 수 있게** 해준다. 이와 유사하게, **Flamingo 모델의 학습 방식 또한 최종 성능에 매우 중요한 역할**을 한다는 것을 우리는 실험적으로 보여준다. Flamingo 모델은 **기계학습을 위해 별도로 주석 처리되지 않은, 웹에서 수집한 다양한 대규모 멀티모달 데이터**로 구성된 \*\*신중하게 설계된 데이터 혼합(mixture)\*\*을 이용해 학습된다. 이러한 학습을 거친 후 Flamingo는 **어떠한 task-specific 튜닝 없이도, 단순한 few-shot prompting만으로 시각적 task에 직접 활용 가능**하다.
 
-### 기여 사항 (Contributions)
+**기여 사항 (Contributions)**
 
 요약하면, 본 논문의 주요 기여는 다음과 같다:  
 (i) 우리는 \*\*Flamingo 계열의 Visual Language Model (VLM)\*\*을 소개한다. 이 모델은 **few-shot input/output 예시만으로도 captioning, visual dialogue, visual question-answering**과 같은 다양한 **멀티모달 task**를 수행할 수 있다. **아키텍처적 혁신** 덕분에, Flamingo는 **텍스트와 시각 데이터를 임의로 섞은 입력을 효율적으로 수용하고, 자유형식의 텍스트를 생성**할 수 있다.  
