@@ -18,7 +18,7 @@ MODEL_NAME = "gemini-2.5-flash"
 SOURCE_DIR = "source_mds"
 TRANSLATED_DIR = "translated_mds"
 PROMPT_EXAMPLE_DIR = "prompt_examples"
-REQUESTS_PER_MINUTE = 10
+REQUESTS_PER_MINUTE = 1000
 SECONDS_TO_WAIT = 60
 
 # --- 프롬프트 생성 함수 (업데이트됨) ---
