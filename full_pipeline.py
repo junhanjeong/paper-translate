@@ -344,19 +344,18 @@ def process_file(path: str, translation_client: genai.Client, translation_config
 
     # 병렬: 번역 / 메타데이터 / 인용
     with ThreadPoolExecutor(max_workers=3) as ex:
-        # fut_translation = ex.submit(translate_content_all_at_once, cleaned_md, translation_client, translation_config)
+        fut_translation = ex.submit(translate_content_all_at_once, cleaned_md, translation_client, translation_config)
         fut_metadata = ex.submit(generate_metadata, translation_client, cleaned_md)
         fut_citation = ex.submit(get_mla_citation, main_title)
 
-        # translated_text = fut_translation.result()
+        translated_text = fut_translation.result()
         metadata_text = fut_metadata.result()
         citation_text = fut_citation.result()
 
     if not citation_text:
         citation_text = f"Citation not found for title: {main_title}"
 
-    final_output = f"{metadata_text}\n\n> {citation_text}".rstrip() + "\n"
-    # final_output = f"{metadata_text}\n\n> {citation_text}\n{translated_text}".rstrip() + "\n"
+    final_output = f"{metadata_text}\n\n> {citation_text}\n{translated_text}".rstrip() + "\n"
 
     out_path = os.path.join(OUTPUT_DIR, f"{base}_final{ext}")
     write_file(out_path, final_output)
