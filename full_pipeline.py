@@ -2,7 +2,6 @@ import os
 import re
 import time
 import requests
-from urllib.parse import quote
 from typing import List, Tuple, Dict, Optional
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,11 +13,11 @@ full_pipeline.py
 
 단일 실행으로 다음을 수행:
 1. source_mds 내 모든 .md 파일 반복
-2. 각 파일에서 '## references' 또는 '## reference' (대소문자 무시) 헤딩 및 이후 내용 제거
+2. 각 파일에서 '## references' 또는 '## reference' (대소문자 무시) 헤딩 섹션만 제거 (다음 헤딩 전까지만)
 3. (참조 제거된) 원본으로부터 동시에 다음 3 작업 병렬 수행
-   - 번역 (기존 parallel_translate.py 와 유사한 청크 병렬 번역)
-   - 메타데이터 생성 (Gemini 2.5 Pro 모델, 지정된 시스템 프롬프트)
-   - 인용(MLA) 검색 (가장 첫 번째 # 헤딩을 논문 제목으로 사용, Crossref -> DOI -> MLA)
+    - 번역 (기존 parallel_translate.py 와 유사한 청크 병렬 번역)
+    - 메타데이터 생성 (Gemini 2.5 Pro 모델, 지정된 시스템 프롬프트)
+    - 인용(MLA) 검색 (가장 첫 번째 # 헤딩을 논문 제목으로 사용, SerpAPI Google Scholar -> MLA)
 4. 결과를 하나의 최종 Markdown으로 결합 후 translated_mds/<원본이름>_final.md 로 저장
 
 최종 출력 포맷:
@@ -40,6 +39,7 @@ load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise ValueError("GOOGLE_API_KEY 환경 변수를 설정해주세요.")
+SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")  # 인용 생성을 위한 SerpAPI 키 (없으면 인용 생략)
 
 # 모델 이름
 TRANSLATION_MODEL = "gemini-2.5-flash"
@@ -218,25 +218,56 @@ def extract_main_title(md: str) -> Optional[str]:
     return None
 
 # --------------------------------------------------
-# 인용 (Crossref -> MLA)
+# 인용 (SerpAPI Google Scholar -> MLA)
 # --------------------------------------------------
 
 def get_mla_citation(title: str) -> Optional[str]:
+    """주어진 논문 제목으로 Google Scholar 검색 후 MLA 인용문 반환.
+
+    흐름:
+      1) google_scholar 엔진으로 검색 → 첫 organic result 추출
+      2) result_id 기반 google_scholar_cite 호출 (없으면 inline_links.serpapi_cite_link 사용)
+      3) citations 배열에서 title == 'MLA' 인 snippet 반환
+    SERPAPI_API_KEY 가 없거나 오류 발생 시 None 반환.
+    """
+    if not SERPAPI_API_KEY:
+        return None
     try:
-        search_url = f"https://api.crossref.org/works?query.bibliographic={quote(title)}&rows=1"
-        res = requests.get(search_url, timeout=20)
-        res.raise_for_status()
-        data = res.json()
-        items = data.get("message", {}).get("items", [])
-        if not items:
+        search_params = {
+            "engine": "google_scholar",
+            "q": title,
+            "hl": "en",
+            "api_key": SERPAPI_API_KEY,
+        }
+        r = requests.get("https://serpapi.com/search", params=search_params, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        organic = data.get("organic_results", [])
+        if not organic:
             return None
-        doi = items[0].get("DOI")
-        if not doi:
-            return None
-        cite_url = f"https://citation.doi.org/format?doi={doi}&style=modern-language-association&lang=en-US"
-        res2 = requests.get(cite_url, headers={"Accept": "text/x-bibliography; charset=utf-8"}, timeout=20)
-        res2.raise_for_status()
-        return res2.text.strip()
+        top = organic[0]
+        result_id = top.get("result_id")
+        if result_id:
+            cite_params = {
+                "engine": "google_scholar_cite",
+                "q": result_id,
+                "hl": "en",
+                "api_key": SERPAPI_API_KEY,
+            }
+            r2 = requests.get("https://serpapi.com/search", params=cite_params, timeout=30)
+        else:
+            cite_link = (top.get("inline_links") or {}).get("serpapi_cite_link")
+            if not cite_link:
+                return None
+            connector = "&" if "?" in cite_link else "?"
+            r2 = requests.get(f"{cite_link}{connector}api_key={SERPAPI_API_KEY}", timeout=30)
+        r2.raise_for_status()
+        cite_data = r2.json()
+        for c in cite_data.get("citations", []):
+            if (c.get("title") or "").strip().upper() == "MLA":
+                snippet = (c.get("snippet") or "").strip()
+                return snippet or None
+        return None
     except Exception:
         return None
 
